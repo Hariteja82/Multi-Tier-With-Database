@@ -88,7 +88,7 @@ stages:
             inputs:
               azureSubscription: 'CICD'
               mavenPomFile: 'pom.xml'
-              goals: 'package'
+              goals: 'deploy'
               publishJUnitResults: true
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
               javaHomeOption: 'JDKVersion'
@@ -99,3 +99,61 @@ stages:
           - task: MavenAuthenticate@0
             inputs:
               artifactsFeeds: 'test-hari'
+
+  - stage: docker_build
+    displayName: 'Docker_Build'
+    jobs:
+      - job: docker_build
+        displayName: 'Dockar_Buils'
+        steps:
+          - task: CmdLine@2
+            inputs:
+              script: 'mvn package'
+          - task: Docker@2
+            inputs:
+              containerRegistry: 'azure-docker'
+              repository: 'test'
+              command: 'build'
+              Dockerfile: '**/Dockerfile'
+              tags: '1'
+
+  - stage: trivy_image_scan
+    displayName: 'Trivy Image Scan'
+    jobs:
+      - job: trivy_image_scan
+        displayName: 'Trivy Image Scan'
+        steps:
+        - task: CmdLine@2
+          inputs:
+            script: 'trivy image --format table -o fs.html hariteja82.azurecr.io/test:1'
+
+  - stage: docker_push
+    displayName: 'Docker_Push'
+    jobs:
+      - job: docker_push
+        displayName: 'Dockar_Push'
+        steps:
+          - task: CmdLine@2
+            inputs:
+              script: 'mvn package'
+          - task: Docker@2
+            inputs:
+              containerRegistry: 'azure-docker'
+              repository: 'test'
+              command: 'push'
+              Dockerfile: '**/Dockerfile'
+              tags: '1'
+              
+  - stage: deploy_to_aks
+    displayName: 'Deploy to AKS'
+    jobs:
+      - job: deploy_to_aks
+        displayName: 'Deploy To AKS'
+        steps:
+          - task: KubernetesManifest@1
+            inputs:
+              action: 'deploy'
+              connectionType: 'kubernetesServiceConnection'
+              kubernetesServiceConnection: 'k8-conf'
+              namespace: 'default'
+              manifests: 'ds.yml'
